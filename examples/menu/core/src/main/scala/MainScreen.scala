@@ -4,12 +4,13 @@ package core
 import sgl._
 import geometry._
 import scene._
+import scene.ui._
 import util._
 
 trait ScreensComponent {
   this: GraphicsProvider with InputProvider with SystemProvider with WindowProvider 
   with GameStateComponent with GameLoopStatisticsComponent with LoggingProvider
-  with GraphicsHelpersComponent with ViewportComponent with SceneComponent =>
+  with GraphicsHelpersComponent with ViewportComponent with SceneComponent with PopupsComponent =>
 
   private implicit val LogTag = Logger.Tag("main-screen")
 
@@ -58,8 +59,34 @@ trait ScreensComponent {
       levelsPane.addNode(button)
     }
 
+    def processInputs(): Unit = {
+      Input.pollEvent() match {
+        case Some(event) =>
+          event match {
+            case Input.KeyDownEvent(Input.Keys.P) =>
+              println("clicked p")
+              scene.addNode(
+                new DialogPopup(
+                  Window.width, Window.height,
+                  new Dialog(Window.dp2px(400),
+                             "Hey there, do you like the weather ok?",
+                             List(("Yes", () => { println("yes") }),
+                                  ("Nope", () => { println("nope") }),
+                                  ("Meh", () => { println("meh") })),
+                             Window.dp2px(36), Graphics.Color.White)
+                ) {
+                  override val backgroundColor = Graphics.Color.rgba(0,0,0,150)
+                }
+              )
+            case _ => scene.processInput(event)
+          }
+          processInputs()
+        case None => ()
+      }
+    }
+
     override def update(dt: Long): Unit = {
-      Input.processEvents(e => scene.processInput(e))
+      processInputs()
       scene.update(dt)
     }
 
