@@ -1,6 +1,8 @@
 package sgl
 
 import util._
+import scala.util.{ Failure, Success }
+
 
 trait GameStateComponent {
   this: GraphicsProvider with SystemProvider with LoggingProvider =>
@@ -164,12 +166,8 @@ trait GameStateComponent {
     * is to actually use the preload for the splash screen background to display
     * while loading the rest of the resources.
     */
-  abstract class LoadingScreen[A](val loaders: Seq[Loader[A]]) extends GameScreen {
-    // TODO: How about using a Map[String, Loader] instead of the list? This
-    // probably would match better with the clients use case of loading a bunch
-    // of resources and then using them, because a Seq is difficult to extract
-    // from the calling side.
- 
+  abstract class LoadingScreen(val loaders: Map[String, Loader[_]]) extends GameScreen {
+
     import scala.collection.mutable.HashSet
 
     /** The minimal duration that we should display the loading screen.
@@ -186,28 +184,25 @@ trait GameStateComponent {
       */
     protected val minDuration: Long = 0
 
-    private var loadingErrors: HashSet[Loader[A]] = new HashSet()
+    /** A set of loaders keys that failed to load.
+      *
+      * The value returned can be different for each call, as
+      * more and more loaders are being processed and
+      * completed/failed.
+      */
+    private val loadingErrorKeys: HashSet[String] = new HashSet()
 
     /** Indicate whether a loading error happened
       *
       * You can display an error message in the render method
       * based on that property.
       */
-    protected def loadingError: Boolean = loadingErrors.nonEmpty
+    protected def loadingError: Boolean = loadingErrorKeys.nonEmpty
 
-    /** The list of loaders that failed to load.
-      *
-      * The value returned can be different for each call, as
-      * more and more loaders are being processed and
-      * completed/failed.
-      */
-    protected def failed: Seq[Loader[A]] = loadingErrors.toList
+    private val loaderKeys: HashSet[String] = loaders.keys.foldLeft(new HashSet[String]())(_ += _)
+    private var remaining: HashSet[String] = loaderKeys.clone()
 
-    private var _remaining: HashSet[Loader[A]] = new HashSet()
-    _remaining ++= loaders
-
-    protected def remaining: Seq[Loader[A]] = _remaining.toList
-    protected def loadedSuccessfully: Seq[Loader[A]] = loaders.diff(_remaining.toList).diff(failed)
+    protected def loadedSuccessfully: HashSet[String] = loaderKeys.diff(remaining).diff(loadingErrorKeys)
 
     /** Compute the percentage of loaded loaders.
       *
@@ -216,7 +211,7 @@ trait GameStateComponent {
       * does not do anything smart for loader that are fetching
       * larger data, it's a simple ratio of numbers completed/total.
       */
-    protected def percentageLoaded: Double = 1 - (_remaining.size.toDouble/loaders.size.toDouble)
+    protected def percentageLoaded: Double = 1 - (remaining.size.toDouble/loaders.size.toDouble)
 
     /** Compute the percentage of progress towards loading.
       *
@@ -248,28 +243,38 @@ trait GameStateComponent {
 
     override def update(dt: Long): Unit = {
       totalDuration += dt
-      for(loader <- _remaining.toSet[Loader[A]]) {
-        if(loader.isLoaded) {
-          _remaining.remove(loader)
-          if(loader.value.get.isFailure) {
-            loadingErrors += loader
-          }
+      for {
+        loaderKey <- remaining
+        loader = loaders(loaderKey)
+      } if (loader.isLoaded) {
+        remaining.remove(loaderKey)
+
+        if (loader.isFailed) {
+          loadingErrorKeys += loaderKey
         }
       }
-      if(totalDuration >= minDuration && _remaining.isEmpty) {
-        if(loadingError) {
+
+      if (totalDuration >= minDuration && remaining.isEmpty) {
+        if (loadingError) {
           logger.error("Failed to load all resources.")
-          // TODO: would be nice to identify the resource beyond just the loader. Maybe that
-          // would be better if we take a Map[String, Loader] in the constructor?
-          loadingErrors.foreach(loader => loader.value.get match {
-            case scala.util.Failure(e) => logger.error("Failed to load resource: " + e + "\n" + e.getStackTrace.mkString("\n"))
+          loadingErrorKeys.foreach(loaderKey => loaders(loaderKey).value.get match {
+            case Failure(e) => logger.error("Failed to load resource: " + e + "\n" + e.getStackTrace.mkString("\n"))
             case _ => () // Not supposed to happen, just add the case to make the compiler happy.
           })
-          if(exitOnError)
+          if (exitOnError) {
             System.exit()
+          }
         }
-        gameState.newScreen(nextScreen)
+        gameState.newScreen(nextScreen(resolveLoaders(loaders)))
       }
+    }
+
+    private def resolveLoaders(m: Map[String, Loader[_]]): Map[String, _] = {
+      m
+        .map { case (k, l) => k -> l.value }
+        .collect {
+          case (k, Some(Success(asset))) => k -> asset
+        }
     }
 
     /** The screen to instantiate and set in the game state.
@@ -286,7 +291,7 @@ trait GameStateComponent {
       * insertion of the new screen, such as releasing resources
       * from the LoadingScreen.
       */
-    def nextScreen(): GameScreen
+    def nextScreen(loaders: Map[String, _]): GameScreen
 
   }
 
