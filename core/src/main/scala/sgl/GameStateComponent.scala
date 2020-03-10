@@ -53,7 +53,7 @@ trait GameStateComponent {
 
     /** Render the screen state while still loading.
       *
-      * While the screen is loading (if some Loaders are set at creation time).
+      * While the screen is loading (if some assets are set at creation time).
       * Then this loadingRender method is called instead of the main render method.
       * This gives the chance to the screen to still render something while waiting
       * on must-have assets to start the main update/render loop.
@@ -76,7 +76,7 @@ trait GameStateComponent {
       * This is ensured to be called after the constructor of the screen
       * but before the first call to update/render. Usually you should use
       * the screen regular constructor for initizializing screen globals,
-      * but this hook will be called after the loaders added in the
+      * but this hook will be called after the assets added in the
       * addPreloading call are finished loading, so it might be a better
       * place for executing initialization code in case you need to preload
       * something.
@@ -166,7 +166,7 @@ trait GameStateComponent {
     * is to actually use the preload for the splash screen background to display
     * while loading the rest of the resources.
     */
-  abstract class LoadingScreen(val loaders: Map[String, Loader[_]]) extends GameScreen {
+  abstract class LoadingScreen(assets: Map[String, Loader[Asset]]) extends GameScreen {
 
     import scala.collection.mutable.HashSet
 
@@ -184,34 +184,34 @@ trait GameStateComponent {
       */
     protected val minDuration: Long = 0
 
-    /** A set of loaders keys that failed to load.
+    /** A set of assets keys that failed to load.
       *
       * The value returned can be different for each call, as
-      * more and more loaders are being processed and
+      * more and more assets are being processed and
       * completed/failed.
       */
-    private val loadingErrorKeys: HashSet[String] = new HashSet()
+    private val loadingErrorAssetKeys: HashSet[String] = new HashSet()
 
     /** Indicate whether a loading error happened
       *
       * You can display an error message in the render method
       * based on that property.
       */
-    protected def loadingError: Boolean = loadingErrorKeys.nonEmpty
+    protected def loadingError: Boolean = loadingErrorAssetKeys.nonEmpty
 
-    private val loaderKeys: HashSet[String] = loaders.keys.foldLeft(new HashSet[String]())(_ += _)
-    private var remaining: HashSet[String] = loaderKeys.clone()
+    private val assetKey: HashSet[String] = assets.keys.foldLeft(new HashSet[String]())(_ += _)
+    private var remaining: HashSet[String] = assetKey.clone()
 
-    protected def loadedSuccessfully: HashSet[String] = loaderKeys.diff(remaining).diff(loadingErrorKeys)
+    protected def loadedSuccessfully: HashSet[String] = assetKey.diff(remaining).diff(loadingErrorAssetKeys)
 
-    /** Compute the percentage of loaded loaders.
+    /** Compute the percentage of loaded assets.
       *
       * This does not distinguish between errors and successes, simply
-      * indicates how many loaders have been loaded. It also
-      * does not do anything smart for loader that are fetching
-      * larger data, it's a simple ratio of numbers completed/total.
+      * indicates how many assets have been loaded. It also
+      * does not do anything smart for when fetching a big asset.
+      * It's a simple ratio of numbers completed/total.
       */
-    protected def percentageLoaded: Double = 1 - (remaining.size.toDouble/loaders.size.toDouble)
+    protected def percentageLoaded: Double = 1 - (remaining.size.toDouble / assets.size.toDouble)
 
     /** Compute the percentage of progress towards loading.
       *
@@ -237,27 +237,27 @@ trait GameStateComponent {
     /** Control whether to exit on loading error.
       *
       * If true, the screen automatically exit the application at the
-      * end of loading, if there is any failed loaders.
+      * end of loading, if there is any failed assets.
       */
     protected val exitOnError = true
 
     override def update(dt: Long): Unit = {
       totalDuration += dt
       for {
-        loaderKey <- remaining
-        loader = loaders(loaderKey)
-      } if (loader.isLoaded) {
-        remaining.remove(loaderKey)
+        assetKey <- remaining
+        asset = assets(assetKey)
+      } if (asset.isLoaded) {
+        remaining.remove(assetKey)
 
-        if (loader.isFailed) {
-          loadingErrorKeys += loaderKey
+        if (asset.isFailed) {
+          loadingErrorAssetKeys += assetKey
         }
       }
 
       if (totalDuration >= minDuration && remaining.isEmpty) {
         if (loadingError) {
           logger.error("Failed to load all resources.")
-          loadingErrorKeys.foreach(loaderKey => loaders(loaderKey).value.get match {
+          loadingErrorAssetKeys.foreach(assetKey => assets(assetKey).value.get match {
             case Failure(e) => logger.error("Failed to load resource: " + e + "\n" + e.getStackTrace.mkString("\n"))
             case _ => () // Not supposed to happen, just add the case to make the compiler happy.
           })
@@ -265,13 +265,13 @@ trait GameStateComponent {
             System.exit()
           }
         }
-        gameState.newScreen(nextScreen(resolveLoaders(loaders)))
+        gameState.newScreen(nextScreen(resolveAssets(assets)))
       }
     }
 
-    private def resolveLoaders(m: Map[String, Loader[_]]): Map[String, _] = {
-      m
-        .map { case (k, l) => k -> l.value }
+    private def resolveAssets(assets: Map[String, Loader[Asset]]): Map[String, Asset] = {
+      assets
+        .map { case (k, a) => k -> a.value }
         .collect {
           case (k, Some(Success(asset))) => k -> asset
         }
@@ -280,7 +280,7 @@ trait GameStateComponent {
     /** The screen to instantiate and set in the game state.
       *
       * The function acts as a factory, that will be invoked only
-      * once and only when all the Loaders are fully loaded.
+      * once and only when all the Assets are fully loaded.
       * This means that if the function creates an instance of the
       * GameScreen, the constructor can rely on the fact that
       * loading is completed.
@@ -291,7 +291,7 @@ trait GameStateComponent {
       * insertion of the new screen, such as releasing resources
       * from the LoadingScreen.
       */
-    def nextScreen(loaders: Map[String, _]): GameScreen
+    def nextScreen(assets: Map[String, Asset]): GameScreen
 
   }
 

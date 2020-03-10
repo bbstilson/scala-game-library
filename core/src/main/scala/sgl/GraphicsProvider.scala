@@ -1,6 +1,6 @@
 package sgl
 
-import util.Loader
+import util.{ Loader, Asset }
 
 trait GraphicsProvider extends GraphicsHelpersComponent {
   this: SystemProvider =>
@@ -9,7 +9,7 @@ trait GraphicsProvider extends GraphicsHelpersComponent {
 
     def loadImage(path: ResourcePath): Loader[Bitmap]
 
-    abstract class AbstractBitmap {
+    abstract class AbstractBitmap extends Asset {
       def height: Int
       def width: Int
 
@@ -40,7 +40,7 @@ trait GraphicsProvider extends GraphicsHelpersComponent {
     }
     type Bitmap <: AbstractBitmap
 
-    abstract class AbstractFont {
+    abstract class AbstractFont extends Asset {
       /** Return the same font family and style but with a new point size. */
       def withSize(size: Int): Font
       def withStyle(style: Font.Style): Font

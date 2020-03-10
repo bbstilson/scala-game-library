@@ -1,6 +1,6 @@
 package sgl
 
-import sgl.util.Loader
+import sgl.util.{ Loader, Asset }
 
 /** Provides platform-specific Audio module.
   *
@@ -49,7 +49,7 @@ trait AudioProvider {
       * then play them at appropriate time, and call dispose on each
       * of them when leaving the level.
       */
-    abstract class AbstractSound {
+    abstract class AbstractSound extends Asset {
   
       type PlayedSound
   
@@ -204,7 +204,7 @@ trait AudioProvider {
      * It is not necessarly entirely loaded in memory, for some device
      * with low RAM it might be streamed directly from disk.
      */
-    abstract class AbstractMusic {
+    abstract class AbstractMusic extends Asset {
 
       /** Play the music.
         * 
